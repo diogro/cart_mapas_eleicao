@@ -1,5 +1,6 @@
 *.zip
 shapes
+vot2014
 
 # History files
 .Rhistory
