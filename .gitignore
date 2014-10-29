@@ -1,6 +1,7 @@
 *.zip
 shapes
 vot2014
+distorted.*
 
 # History files
 .Rhistory

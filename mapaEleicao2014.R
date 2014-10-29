@@ -1,24 +1,21 @@
 # Packages
 # ======================================================================================
 
-require("rgdal") # requires sp, will use proj.4 if installed
-require("rgeos") # requires sp, will use proj.4 if installed
+require("rgdal")
+require("rgeos")
 require("maptools")
-require("ggplot2")
 require("plyr")
-library(devtools)
-install_git("git://github.com/gsk3/taRifx.geo.git")
-library(taRifx.geo)
 library("XML")
 library("pbapply")
 
 
 # inputs
 # =======================================================================================
-mainShape_folder  <- "~/Desktop/shapes/"
-votacaoCsv_folder <- "~/Desktop/vot2014/"
-iframeDaFolha  <- "~/Desktop/daFolha.txt"
-csvConversaoId  <- "~/Desktop/conversao_ID_IBGE_TSE2.csv"
+mainShape_folder  <- "./shapes/"
+votacaoCsv_folder <- "./vot2014/"
+iframeDaFolha  <- "./daFolha.txt"
+csvConversaoId  <- "./conversao_ID_IBGE_TSE2.csv"
+novaPaleta  <- FALSE
 
 
 # Functions
@@ -187,20 +184,10 @@ id  <- gsub("^id=\"municipio_", "", id)[-1]
 dupMun  <- duplicated(id)
 id  <- id[!dupMun]
 cores  <- cores[!dupMun]
-cores[cores == ""]
-
-# Para não ficar binario
-cores[cores == "#ed6169"]  <- "#B51A2E"
-cores[cores == "#f7b6ba"]  <- "#882F4A"
-cores[cores == "#98c5d7"]  <- "#5A4465"
-cores[cores == "#378eb2"]  <- "#2D5981"
 
 # FALTA UM MUNICIPIO NA FOLHA
 id  <- c(id, 2206720)
 cores  <- c(cores, "#ffffff")
-
-
-
 colMunicipios  <- data.frame(cores)
 rownames(colMunicipios)  <- id
 
@@ -216,15 +203,58 @@ spdf <- SpatialPolygonsDataFrame(merged_shapes, totalVotosDf, match.ID = TRUE)
 
 ###################################################################################
 # Abrir esse arquivo no ScapeT Toad  e depois salva o brazil_r_useworld_r_use.shp(2)
-# em ~/Desktop/x.shp
-writePolyShape(spdf, "~/Desktop/brazil_r_useworld_r_use.shp")
+# em distorted.shp
+writePolyShape(spdf, "./brazil_r_useworld_r_use.shp")
 ###################################################################################
 
 
-cartogram <-readShapePoly("~/Desktop/x.shp")
-cartogram$cores  <- 
+cartogram <- readShapePoly("./distorted.shp")
+par(family = "Palatino")
 
-cartogram2 <- SpatialPolygonsDataFrame(cartogram, colMunicipios, match.ID = TRUE)
+# Mudas as cores
+dilma  <- "#E30513"
+aecio  <- "#006F9D"
 
-plot(cartogram, col = as.character(cartogram$cores), lwd = 0.1, )
+cores  <- as.character(cartogram$cores)
+grandezaDaVotacaoParadilma  <- rep(NA, length(cores))
+grandezaDaVotacaoParadilma[cores == "#006F9D"]  <- 1
+grandezaDaVotacaoParadilma[cores == "#378eb2"]  <- 2
+grandezaDaVotacaoParadilma[cores == "#98c5d7"]  <- 3
+grandezaDaVotacaoParadilma[cores == "#f7b6ba"]  <- 4
+grandezaDaVotacaoParadilma[cores == "#ed6169"]  <- 5
+grandezaDaVotacaoParadilma[cores == "#E30513"]  <- 6
 
+
+if(novaPaleta){
+  colfunc <- colorRampPalette(c(aecio, dilma))
+  coresNovas  <- colfunc(6)
+  for(i in 1:length(coresNovas)){
+    cores[grandezaDaVotacaoParadilma==i]  <- coresNovas[i]
+  }
+} else{
+  coresNovas  <- c("#006F9D", "#378eb2", "#98c5d7","#f7b6ba", "#ed6169","#E30513")
+}
+
+cartogram$cores  <- cores
+
+par(xpd = TRUE)
+plot(cartogram, col = as.character(cartogram$cores), lwd = 0.1)
+rect(xleft = -70, ybottom = -40, xright = -67.5, ytop = -37.5, col = coresNovas[1])
+rect(xleft = -67.5, ybottom = -40, xright = -65, ytop = -37.5, col = coresNovas[2])
+rect(xleft = -65, ybottom = -40, xright = -62.5, ytop = -37.5, col = coresNovas[3])
+rect(xleft = -62.5, ybottom = -40, xright = -60, ytop = -37.5, col = coresNovas[4])
+rect(xleft = -60, ybottom = -40, xright = -57.5, ytop = -37.5, col = coresNovas[5])
+rect(xleft = -57.5, ybottom = -40, xright = -55, ytop = -37.5, col = coresNovas[6])
+
+cexLegend  <- 0.9
+text(x = -70, y = -41, labels = 0, cex = cexLegend)
+text(x = -67.5, y = -41, labels = 20, cex = cexLegend)
+text(x = -65, y = -41, labels = 35, cex = cexLegend)
+text(x = -62.5, y = -41, labels = 50, cex = cexLegend)
+text(x = -60, y = -41, labels = 65, cex = cexLegend)
+text(x = -57.5, y = -41, labels = 80, cex = cexLegend)
+text(x = -55, y = -41, labels = 100, cex = cexLegend)
+
+text(x = -62.5, y = -36.5, "% de votos para  Dilma Rousseff", cex = cexLegend)
+
+text(x = -35, y = -38.7, labels = "Por:\nDiogo Melo\nDaniel Mariani", adj = 0, cex = 0.8)
