@@ -15,7 +15,7 @@ mainShape_folder  <- "./shapes/"
 votacaoCsv_folder <- "./vot2014/"
 iframeDaFolha  <- "./daFolha.txt"
 csvConversaoId  <- "./conversao_ID_IBGE_TSE2.csv"
-novaPaleta  <- FALSE
+novaPaleta  <- TRUE
 
 
 # Functions
@@ -23,7 +23,7 @@ novaPaleta  <- FALSE
 # via http://stackoverflow.com/questions/13289009/check-if-character-string-is-a-valid-color-representation
 areColors <- function(x) {
   sapply(x, function(X) {
-    tryCatch(is.matrix(col2rgb(X)), 
+    tryCatch(is.matrix(col2rgb(X)),
              error = function(e) FALSE)
   })
 }
@@ -37,9 +37,9 @@ dir.create2  <- function(dir){
 
 getBrZipShapesUrl  <- function(){
   url_estadosIndex  <- "http://dados.gov.br/dataset/malha-geometrica-dos-municipios-brasileiros"
-  html_estadosIndex  <- htmlParse(url_estadosIndex) 
-  url_estadosRelative  <- xpathApply(doc = html_estadosIndex, 
-                                     path ="//*[@id='dataset-resources']/ul/li[*]/a", 
+  html_estadosIndex  <- htmlParse(url_estadosIndex)
+  url_estadosRelative  <- xpathApply(doc = html_estadosIndex,
+                                     path ="//*[@id='dataset-resources']/ul/li[*]/a",
                                      xmlGetAttr, name ="href")
   url_estadosAbsolut  <- paste0("http://dados.gov.br/", url_estadosRelative)
   html_estados  <- lapply(url_estadosAbsolut, htmlParse)
@@ -57,7 +57,7 @@ downloadEstadosBrShapes  <- function(shape_folder){
   for(shapeIndex in 1:nShapes){
     download.file(url = url_shape[shapeIndex], localPath_zipShape[shapeIndex])
   }
-  lapply(localPath_zipShape, unzip, exdir = shape_folder) 
+  lapply(localPath_zipShape, unzip, exdir = shape_folder)
   sapply(localPath_zipShape, file.remove)
   allDirs <- list.dirs(mainShape_folder)
   selectShapesDir  <- grepl("/\\w{2,2}$", allDirs)
@@ -70,21 +70,21 @@ downloadTse  <- function(folder){
   zipPatch  <- gsub(".*/", folder,  file_url)
   download.file(file_url, destfile = zipPatch)
   unzip(zipPatch, exdir = folder)
-  file.remove(zipPatch)  
+  file.remove(zipPatch)
 }
 
 readVotacoes  <- function(folder){
   tablesPatch  <- list.files(folder, pattern = "\\.txt$", full.names = TRUE)
-  tabelaPorEstado  <- pblapply(tablesPatch, read.csv, stringsAsFactors = FALSE, encoding = "latin9", 
+  tabelaPorEstado  <- pblapply(tablesPatch, read.csv, stringsAsFactors = FALSE, encoding = "latin9",
                                sep = ";", header = FALSE)
   todosEstadosTabela  <- do.call(rbind, tabelaPorEstado)
-  colnames(todosEstadosTabela)  <- c("DATA_GERACAO", "HORA_GERACAO", "ANO_ELEICAO", 
+  colnames(todosEstadosTabela)  <- c("DATA_GERACAO", "HORA_GERACAO", "ANO_ELEICAO",
                                      "NUM_TURNO", "DESCRICAO_ELEICAO", "SIGLA_UF",
                                      "SIGLA_UE", "CODIGO_MUNICIPIO", "NOME_MUNICIPIO",
-                                     "NUMERO_ZONA","CODIGO_CARGO","DESCRICAO_CARGO", 
-                                     "TIPO_LEGENDA","NOME_COLIGACAO", "COMPOSICAO_LEGENDA", 
-                                     "SIGLA_PARTIDO", "NUMERO_PARTIDO", "NOME_PARTIDO", 
-                                     "QTDE_VOTOS_NOMINAIS", "QTDE_VOTOS_LEGENDA", 
+                                     "NUMERO_ZONA","CODIGO_CARGO","DESCRICAO_CARGO",
+                                     "TIPO_LEGENDA","NOME_COLIGACAO", "COMPOSICAO_LEGENDA",
+                                     "SIGLA_PARTIDO", "NUMERO_PARTIDO", "NOME_PARTIDO",
+                                     "QTDE_VOTOS_NOMINAIS", "QTDE_VOTOS_LEGENDA",
                                      "TRANSITO")
   todosEstadosTabela
 }
@@ -114,8 +114,9 @@ create_shape_df <- function(shape) {
 
 # Downloads
 # ==========================================================================================
-estadosShape_folder <- downloadEstadosBrShapes(mainShape_folder)
-downloadTse(votacaoCsv_folder)
+#estadosShape_folder <- downloadEstadosBrShapes(mainShape_folder)
+#downloadTse(votacaoCsv_folder)
+estadosShape_folder <- list.dirs(mainShape_folder)[-1]
 
 
 
@@ -129,14 +130,14 @@ merged_shapes  <- do.call(rbind, shapes)
 # Formata votacoes
 # ==========================================================================================
 
-# Votacao 
+# Votacao
 votacao  <- readVotacoes(votacaoCsv_folder)
 votacaoNoGringo  <- votacao[votacao$SIGLA_UE != "ZZ",]
 votacaoPresidente  <- votacao[votacaoNoGringo$DESCRICAO_CARGO == "Presidente",]
 tabelasPorMunicipio  <- split(votacaoPresidente, votacaoPresidente$CODIGO_MUNICIPIO)
 
 # Total de votos em cada municipio
-totalVotosPorMunicipio  <- sapply(tabelasPorMunicipio, function(x) sum(x$QTDE_VOTOS_NOMINAIS)) 
+totalVotosPorMunicipio  <- sapply(tabelasPorMunicipio, function(x) sum(x$QTDE_VOTOS_NOMINAIS))
 
 
 
@@ -209,6 +210,7 @@ writePolyShape(spdf, "./brazil_r_useworld_r_use.shp")
 
 
 cartogram <- readShapePoly("./distorted.shp")
+cartogram_original <- spdf
 par(family = "Palatino")
 
 # Mudas as cores
@@ -236,8 +238,11 @@ if(novaPaleta){
 }
 
 cartogram$cores  <- cores
+cartogram_original$cores  <- cores
 
-par(xpd = TRUE)
+png('./final_v2.png', w = 1440, h = 700, units ='px')
+par(xpd = TRUE, mfrow = c(1, 2))
+plot(cartogram_original, col = as.character(cartogram_original$cores), lwd = 0.1)
 plot(cartogram, col = as.character(cartogram$cores), lwd = 0.1)
 rect(xleft = -70, ybottom = -40, xright = -67.5, ytop = -37.5, col = coresNovas[1])
 rect(xleft = -67.5, ybottom = -40, xright = -65, ytop = -37.5, col = coresNovas[2])
@@ -258,3 +263,4 @@ text(x = -55, y = -41, labels = 100, cex = cexLegend)
 text(x = -62.5, y = -36.5, "% de votos para  Dilma Rousseff", cex = cexLegend)
 
 text(x = -35, y = -38.7, labels = "Por:\nDiogo Melo\nDaniel Mariani", adj = 0, cex = 0.8)
+dev.off()
