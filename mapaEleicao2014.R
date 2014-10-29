@@ -109,11 +109,10 @@ readVotacoes  <- function(folder, filtrar_cargo = NULL, remove_votosExterior = T
   todosEstadosTabela
 }
 
-
 read_shape_folder <- function(folder){
   shapes <- dir(folder)
   shapes <- unique(unlist(lapply(shapes, function(x) gsub('\\..*', '', x))))
-  ogr  <- readOGR(shapes[grep('MUE', shapes)], folder)
+  ogr  <- readOGR(folder, shapes[grep('MUE', shapes)])
   row.names(ogr)  <- as.character(ogr$CD_GEOCODM)
   ogr
 }
@@ -268,10 +267,12 @@ addLegend4Charts  <- function(paletaUnica = TRUE){
 
 # # downloads
 # # ==========================================================================================
-# municipiosShape_folder <- downloadMunicipiosPorEstadosShapes(municipiosShape_mainFolder)
-# estadosShape_folder  <- downloadEstadosNoBrasilShapes(estadosShape_folder)
-# downloadTse(votacaoCsv_folder)
+ #municipiosShape_folder <- downloadMunicipiosPorEstadosShapes(municipiosShape_mainFolder)
+ estadosShape_folder  <- downloadEstadosNoBrasilShapes(estadosShape_folder)
+ #downloadTse(votacaoCsv_folder)
 
+municipiosShape_folder <- list.dirs(municipiosShape_mainFolder)[-1]
+estadosShape_folder <- list.dirs(estadosShape_folder)[-1]
 
 
 # le e formata Shapes
