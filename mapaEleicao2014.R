@@ -272,7 +272,6 @@ addLegend4Charts  <- function(paletaUnica = TRUE){
  #downloadTse(votacaoCsv_folder)
 
 municipiosShape_folder <- list.dirs(municipiosShape_mainFolder)[-1]
-estadosShape_folder <- list.dirs(estadosShape_folder)[-1]
 
 
 # le e formata Shapes
@@ -280,7 +279,7 @@ estadosShape_folder <- list.dirs(estadosShape_folder)[-1]
 shapesMunicipios <- llply(municipiosShape_folder, read_shape_folder)
 merged_shapesMunicipios  <- do.call(rbind, shapesMunicipios)
 
-shapeEstados <- readOGR(layer =  'UFEBRASIL', estadosShape_folder)
+shapeEstados <- readOGR(estadosShape_folder,layer =  'UFEBRASIL')
 row.names(shapeEstados)  <- c("RO", "AC", "AM", "RR", "PA", "AP", "TO", "MA", "PI", "CE", "RN", "PB",
                               "PE", "AL", "SE", "BA", "MG", "ES", "RJ",  "SP", "PR", "SC","RS", "MS",
                               "MT", "GO", "DF")
