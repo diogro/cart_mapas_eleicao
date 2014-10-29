@@ -199,18 +199,17 @@ totalVotosDf$cores  <- colMunicipios[row.names(totalVotosDf),]
 # SPDF
 # =========================================================================================
 
-spdf <- SpatialPolygonsDataFrame(merged_shapes, totalVotosDf, match.ID = TRUE)
+cartogram_original <- SpatialPolygonsDataFrame(merged_shapes, totalVotosDf, match.ID = TRUE)
 
 
 ###################################################################################
 # Abrir esse arquivo no ScapeT Toad  e depois salva o brazil_r_useworld_r_use.shp(2)
 # em distorted.shp
-writePolyShape(spdf, "./brazil_r_useworld_r_use.shp")
+writePolyShape(cartogram_original, "./brazil_r_useworld_r_use.shp")
 ###################################################################################
 
 
 cartogram <- readShapePoly("./distorted.shp")
-cartogram_original <- spdf
 par(family = "Palatino")
 
 # Mudas as cores
