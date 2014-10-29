@@ -7,15 +7,17 @@ require("maptools")
 require("plyr")
 library("XML")
 library("pbapply")
-
+library("plotrix")
 
 # inputs
 # =======================================================================================
-mainShape_folder  <- "./shapes/"
+municipiosShape_mainFolder  <- "./shapes/municipios/"
+estadosShape_folder  <- "./shapes/estados/"
 votacaoCsv_folder <- "./vot2014/"
 iframeDaFolha  <- "./daFolha.txt"
 csvConversaoId  <- "./conversao_ID_IBGE_TSE2.csv"
-novaPaleta  <- TRUE
+corMaxDilma  <-  "#450003"
+corMinDilma  <-  "#F4F5F0"
 
 
 # Functions
@@ -49,7 +51,7 @@ getBrZipShapesUrl  <- function(){
   sapply(html_estados, getShapeUrl)
 }
 
-downloadEstadosBrShapes  <- function(shape_folder){
+downloadMunicipiosPorEstadosShapes  <- function(shape_folder){
   dir.create2(shape_folder)
   url_shape  <- getBrZipShapesUrl()
   localPath_zipShape  <- gsub(".*/", shape_folder, url_shape)
@@ -59,9 +61,20 @@ downloadEstadosBrShapes  <- function(shape_folder){
   }
   lapply(localPath_zipShape, unzip, exdir = shape_folder)
   sapply(localPath_zipShape, file.remove)
-  allDirs <- list.dirs(mainShape_folder)
+  allDirs <- list.dirs(shape_folder)
   selectShapesDir  <- grepl("/\\w{2,2}$", allDirs)
   allDirs[selectShapesDir]
+}
+
+
+downloadEstadosNoBrasilShapes  <- function(shape_folder){
+  dir.create2(shape_folder)
+  url_uspShape  <- "http://www.usp.br/nereus/wp-content/uploads/Brasil.zip"
+  localPath_zipShape  <- gsub(".*/",  shape_folder, url_uspShape)
+  download.file(url = url_uspShape, localPath_zipShape)
+  unzip(localPath_zipShape, exdir = shape_folder)
+  file.remove(localPath_zipShape)
+  normalizePath(shape_folder)
 }
 
 downloadTse  <- function(folder){
@@ -73,7 +86,8 @@ downloadTse  <- function(folder){
   file.remove(zipPatch)
 }
 
-readVotacoes  <- function(folder){
+
+readVotacoes  <- function(folder, filtrar_cargo = NULL, remove_votosExterior = TRUE){
   tablesPatch  <- list.files(folder, pattern = "\\.txt$", full.names = TRUE)
   tabelaPorEstado  <- pblapply(tablesPatch, read.csv, stringsAsFactors = FALSE, encoding = "latin9",
                                sep = ";", header = FALSE)
@@ -86,22 +100,23 @@ readVotacoes  <- function(folder){
                                      "SIGLA_PARTIDO", "NUMERO_PARTIDO", "NOME_PARTIDO",
                                      "QTDE_VOTOS_NOMINAIS", "QTDE_VOTOS_LEGENDA",
                                      "TRANSITO")
+  if(!is.null(filtrar_cargo)){
+    todosEstadosTabela  <- todosEstadosTabela[todosEstadosTabela$DESCRICAO_CARGO == filtrar_cargo,]
+  }
+  if(remove_votosExterior){
+    todosEstadosTabela  <- todosEstadosTabela[todosEstadosTabela$SIGLA_UF != "ZZ",]
+  }
   todosEstadosTabela
 }
+
 
 read_shape_folder <- function(folder){
   shapes <- dir(folder)
   shapes <- unique(unlist(lapply(shapes, function(x) gsub('\\..*', '', x))))
-  ogr  <- read_shape(shapes[grep('MUE', shapes)], folder)
+  ogr  <- readOGR(shapes[grep('MUE', shapes)], folder)
   row.names(ogr)  <- as.character(ogr$CD_GEOCODM)
   ogr
 }
-
-read_shape <- function(layer, folder){
-  readOGR(dsn = folder, layer=layer)
-}
-
-
 
 create_shape_df <- function(shape) {
   shape@data$id = rownames(shape@data)
@@ -110,156 +125,307 @@ create_shape_df <- function(shape) {
   shape.df
 }
 
+getColorDaFolha  <- function(iframeDaFolha){
+
+  # Foi extraido do mapa da folha:
+  # http://arte.folha.uol.com.br/poder/2014/10/26/apuracao_comparativos/#/sao-paulo/3550308-sao-paulo
+  segundoTurnoString  <- readLines(iframeDaFolha)
+  segundoTurnoVec  <- unlist(strsplit(segundoTurnoString, "<path "))
 
 
-# Downloads
-# ==========================================================================================
-#estadosShape_folder <- downloadEstadosBrShapes(mainShape_folder)
-#downloadTse(votacaoCsv_folder)
-estadosShape_folder <- list.dirs(mainShape_folder)[-1]
+  cores  <- gsub("^fill=\"|\" data-fill=\".*$", "", segundoTurnoVec)[-1]
+  cores  <- gsub("^.* fill=\"|\"></path>$", "", cores)[-1]
+  cores[!areColors(cores)]  <- "#ffffff"
+  id  <- gsub("^.* id=\"municipio_|\" (data-uf|class)=.*$", "", segundoTurnoVec)[-1]
+  id  <- gsub("^id=\"municipio_", "", id)[-1]
+
+  dupMun  <- duplicated(id)
+  id  <- id[!dupMun]
+  cores  <- cores[!dupMun]
+
+  # FALTA UM MUNICIPIO NA FOLHA
+  id  <- c(id, 2206720)
+  cores  <- c(cores, "#ffffff")
+  colMunicipios  <- data.frame(cores)
+  rownames(colMunicipios)  <- id
+  colMunicipios
+}
 
 
 
-# Formata Shapes
+changeCores  <- function(spdf){
+  cores  <- as.character(spdf$cores)
+  grandezaDaVotacaoParadilma  <- rep(NA, length(cores))
+  grandezaDaVotacaoParadilma[cores == "#006F9D"]  <- 1
+  grandezaDaVotacaoParadilma[cores == "#378eb2"]  <- 2
+  grandezaDaVotacaoParadilma[cores == "#98c5d7"]  <- 3
+  grandezaDaVotacaoParadilma[cores == "#f7b6ba"]  <- 4
+  grandezaDaVotacaoParadilma[cores == "#ed6169"]  <- 5
+  grandezaDaVotacaoParadilma[cores == "#E30513"]  <- 6
+
+  colfunc <- colorRampPalette(c(corMinDilma, corMaxDilma))
+  coresNovas  <- colfunc(6)
+  for(i in 1:length(coresNovas)){
+    cores[grandezaDaVotacaoParadilma==i]  <- coresNovas[i]
+  }
+  spdf$cores  <- cores
+  spdf
+
+}
+
+
+legenda  <- function(paletaUnica = TRUE, cexLegend= 0.9){
+  par_xpdOriginal  <- par("xpd" = TRUE)
+  par_familyOriginal  <- par(family = "Palatino")
+
+  if(paletaUnica){
+    colfunc <- colorRampPalette(c(corMinDilma, corMaxDilma))
+    cores  <- colfunc(6)
+  } else {
+    cores  <- c("#006F9D", "#378eb2", "#98c5d7", "#f7b6ba", "#ed6169", "#E30513")
+  }
+
+  # Modo nada sutil de fazer isso
+  par(xpd = TRUE)
+  rect(xleft = -70, ybottom = -40, xright = -67.5, ytop = -37.5, col = cores[1])
+  rect(xleft = -67.5, ybottom = -40, xright = -65, ytop = -37.5, col = cores[2])
+  rect(xleft = -65, ybottom = -40, xright = -62.5, ytop = -37.5, col = cores[3])
+  rect(xleft = -62.5, ybottom = -40, xright = -60, ytop = -37.5, col = cores[4])
+  rect(xleft = -60, ybottom = -40, xright = -57.5, ytop = -37.5, col = cores[5])
+  rect(xleft = -57.5, ybottom = -40, xright = -55, ytop = -37.5, col = cores[6])
+
+  cexLegend  <- 0.9
+  corLegend  <- "#1C201F"
+  text(x = -70, y = -41, labels = 0, cex = cexLegend, col = corLegend)
+  text(x = -67.5, y = -41, labels = 20, cex = cexLegend, col = corLegend)
+  text(x = -65, y = -41, labels = 35, cex = cexLegend, col = corLegend)
+  text(x = -62.5, y = -41, labels = 50, cex = cexLegend, col = corLegend)
+  text(x = -60, y = -41, labels = 65, cex = cexLegend, col = corLegend)
+  text(x = -57.5, y = -41, labels = 80, cex = cexLegend, col = corLegend)
+  text(x = -55, y = -41, labels = 100, cex = cexLegend, col = corLegend)
+  text(x = -62.5, y = -36.5, "% de votos para  Dilma Rousseff", cex = cexLegend, col = corLegend)
+}
+
+por  <- function(cex = 0.7){
+  text(x = -35, y = -38.7, labels = "Por:\nDiogo Melo\nDaniel Mariani", adj = 0, cex = cex, col = "#1C201F")
+}
+
+plotEleicao  <- function(spdf, paletaUnica = TRUE, lwdFronteira = 0.1, legenda = TRUE){
+  if(paletaUnica){
+    spdf  <- changeCores(spdf)
+  }
+  plot(spdf, col = as.character(spdf$cores), lwd = lwdFronteira)
+  if(legenda){
+    legenda(paletaUnica = paletaUnica)
+    por()
+  }
+}
+
+
+addLegend4Charts  <- function(paletaUnica = TRUE){
+  par_xpdOriginal  <- par("xpd" = TRUE)
+  par_familyOriginal  <- par(family = "Palatino")
+
+  if(paletaUnica){
+    colfunc <- colorRampPalette(c(corMinDilma, corMaxDilma))
+    cores  <- colfunc(6)
+  } else {
+    cores  <- c("#006F9D", "#378eb2", "#98c5d7", "#f7b6ba", "#ed6169", "#E30513")
+  }
+  corLegend  <- "#1C201F"
+
+  # Legenda
+  par(xpd = TRUE)
+  par(new = TRUE)
+  cexLegend  <- 0.7
+  par(mfrow=c(1,1))
+  plot(1:100, 1:100, axes = FALSE, type = "n")
+  topY  <- 52
+  bottomY  <- 50
+  xLeft  <- 35
+  xSize  <- 3
+  distText  <- 1
+  numeros  <- c(0, 20, 35, 50, 65, 80)
+  names(numeros)  <- cores
+  for(cor in cores){
+    rect(xleft = xLeft, ybottom = bottomY, xright = xLeft + xSize , ytop = topY, col = cor)
+    text(x = xLeft, y = bottomY - distText, labels = numeros[cor], cex = cexLegend, col = corLegend)
+    xLeft  <- xLeft + xSize
+  }
+  text(x = xLeft, y = bottomY - distText, labels = 100, cex = cexLegend, col = corLegend)
+  text(x = 44, y = topY + distText , "% de votos para  Dilma Rousseff", cex = cexLegend, col = corLegend)
+
+  text(x = 90, y = 0, labels = "Por:\nDiogo Melo\nDaniel Mariani", cex = 0.65, col = corLegend, adj = 0)
+  textbox(c(28, 65), 2,
+          c("Estados/muncípios dos mapas da direita foram expandidos ou encolhidos de acordo com o número de votantes da região."),
+          box = FALSE, cex = 0.75)
+
+  par(xpd = FALSE)
+  par(new = FALSE)
+}
+
+
+
+# # downloads
+# # ==========================================================================================
+# municipiosShape_folder <- downloadMunicipiosPorEstadosShapes(municipiosShape_mainFolder)
+# estadosShape_folder  <- downloadEstadosNoBrasilShapes(estadosShape_folder)
+# downloadTse(votacaoCsv_folder)
+
+
+
+# le e formata Shapes
 # =========================================================================================
+shapesMunicipios <- llply(municipiosShape_folder, read_shape_folder)
+merged_shapesMunicipios  <- do.call(rbind, shapesMunicipios)
 
-shapes <- llply(estadosShape_folder, read_shape_folder)
-merged_shapes  <- do.call(rbind, shapes)
+shapeEstados <- readOGR(estadosShape_folder,layer =  'UFEBRASIL')
+row.names(shapeEstados)  <- c("RO", "AC", "AM", "RR", "PA", "AP", "TO", "MA", "PI", "CE", "RN", "PB",
+                              "PE", "AL", "SE", "BA", "MG", "ES", "RJ",  "SP", "PR", "SC","RS", "MS",
+                              "MT", "GO", "DF")
+
 
 
 # Formata votacoes
 # ==========================================================================================
+votacao  <- readVotacoes(votacaoCsv_folder, filtrar_cargo = "Presidente", remove_votosExterior = TRUE)
+votacaoPorMunicipio  <- split(votacao, votacao$CODIGO_MUNICIPIO)
+votacaoPorUF  <- split(votacao, votacao$SIGLA_UF)
 
-# Votacao
-votacao  <- readVotacoes(votacaoCsv_folder)
-votacaoNoGringo  <- votacao[votacao$SIGLA_UE != "ZZ",]
-votacaoPresidente  <- votacao[votacaoNoGringo$DESCRICAO_CARGO == "Presidente",]
-tabelasPorMunicipio  <- split(votacaoPresidente, votacaoPresidente$CODIGO_MUNICIPIO)
-
-# Total de votos em cada municipio
-totalVotosPorMunicipio  <- sapply(tabelasPorMunicipio, function(x) sum(x$QTDE_VOTOS_NOMINAIS))
+totalVotosPorMunicipio  <- sapply(votacaoPorMunicipio, function(x) sum(x$QTDE_VOTOS_NOMINAIS))
+totalVotosPorUF  <- sapply(votacaoPorUF, function(x) sum(x$QTDE_VOTOS_NOMINAIS))
 
 
 
 
-# Merge os IDs
+# Merge os IDs dos municipios TSE (aonde esta a votacao) -- IBGE (aonde estao os shapes)
 # =======================================================================================
-#### Para juntar os votos com a votação precisa converter o ID do TSE para o IBGE
-tabelaConversaoID  <- read.csv(csvConversaoId)[,1:2]
+tabelaConversaoID  <- read.csv(csvConversaoId)[,c("Cod_TSE", "Cod_IBGE")]
 # conserta os 7 municipios ausentes
-tabelaConversaoID  <- rbind(tabelaConversaoID, c(33650, 2903300))
-tabelaConversaoID  <- rbind(tabelaConversaoID, c(34010, 2905107))
-tabelaConversaoID  <- rbind(tabelaConversaoID, c(36919, 2919504))
-tabelaConversaoID  <- rbind(tabelaConversaoID, c(22292, 2516409))
-tabelaConversaoID  <- rbind(tabelaConversaoID, c(16250 , 2401305))
-# Esses dois "pseudo muncipios" não estão no ibge, então os botei em pelotas, que é próxima
-tabelaConversaoID  <- rbind(tabelaConversaoID, c(87912, 4300001))
-tabelaConversaoID  <- rbind(tabelaConversaoID, c(87912, 4300002))
+municipiosAusentes  <- data.frame(Cod_TSE = c(33650, 34010, 36919, 22292, 16250,
+                                              87912, 87912), # Esses dois "pseudo muncipios" não estão no ibge,
+                                                             # então os botei em pelotas, que é próxima.
+                                  Cod_IBGE = c(2903300, 2905107, 2919504, 2516409,
+                                               2401305, 4300001, 4300002))
+tabelaConversaoID  <- rbind(tabelaConversaoID, municipiosAusentes)
 
-
-# Codigos do ibge na tabela de conversao
 codigosIBGE  <- tabelaConversaoID$Cod_IBGE
-totalVotos  <- totalVotosPorMunicipio[as.character(tabelaConversaoID$Cod_TSE)]
-select_remove  <- is.na(totalVotos)
-codigosIBGE  <- codigosIBGE[!select_remove]
-totalVotos  <- totalVotos[!select_remove]
-selectTemShape  <- codigosIBGE %in% row.names(merged_shapes)
-totalVotosDf  <- data.frame(totalVotos[selectTemShape])
-rownames(totalVotosDf)  <- codigosIBGE[selectTemShape]
+totalVotosPorMunicipio  <- totalVotosPorMunicipio[as.character(tabelaConversaoID$Cod_TSE)]
+
+# 8 municipios que estão no tabela de conversão não estão no TSE.
+# como esses não tem correspondência para votação são removidos
+select_NoTSE  <- is.na(totalVotosPorMunicipio)
+sum(select_NoTSE)
+codigosIBGE  <- codigosIBGE[!select_NoTSE]
+totalVotosPorMunicipio  <- totalVotosPorMunicipio[!select_NoTSE]
+
+# 10 municipios que estão no TSE não tem shapes.
+# como não seria possível representa-los, são removidos
+selectTemShape  <- codigosIBGE %in% row.names(merged_shapesMunicipios)
+sum(selectTemShape)
+totalVotosPorMunicipio  <- totalVotosPorMunicipio[selectTemShape]
+
+
+# Votacao como DF
+# =====================================================================================
+totalVotosPorMunicipio_df  <- data.frame(totalVotosPorMunicipio, stringsAsFactors = FALSE)
+rownames(totalVotosPorMunicipio_df)  <- codigosIBGE[selectTemShape]
+totalVotosPorUF_df  <- data.frame(totalVotosPorUF, stringsAsFactors = FALSE)
 
 
 
-# Cores
+# Cores -- representam a votacao
 # ==========================================================================================
 
-segundoTurnoString  <- readLines(iframeDaFolha)
-segundoTurnoVec  <- unlist(strsplit(segundoTurnoString, "<path "))
+#### Por municipio
+colMunicipios <- getColorDaFolha(iframeDaFolha)
+totalVotosPorMunicipio_df$cores  <- as.character(colMunicipios[as.character(rownames(totalVotosPorMunicipio_df)),])
 
-
-cores  <- gsub("^fill=\"|\" data-fill=\".*$", "", segundoTurnoVec)[-1]
-cores  <- gsub("^.* fill=\"|\"></path>$", "", cores)[-1]
-cores[!areColors(cores)]  <- "#ffffff"
-id  <- gsub("^.* id=\"municipio_|\" (data-uf|class)=.*$", "", segundoTurnoVec)[-1]
-id  <- gsub("^id=\"municipio_", "", id)[-1]
-
-dupMun  <- duplicated(id)
-id  <- id[!dupMun]
-cores  <- cores[!dupMun]
-
-# FALTA UM MUNICIPIO NA FOLHA
-id  <- c(id, 2206720)
-cores  <- c(cores, "#ffffff")
-colMunicipios  <- data.frame(cores)
-rownames(colMunicipios)  <- id
-
-totalVotosDf$cores  <- colMunicipios[row.names(totalVotosDf),]
+#### Por estado
+votacao_dilmaUF  <- c("AC" , 63.68 , "#f7b6ba"  ,
+                      "AM" , 65.02 , "#f7b6ba"  ,
+                      "RR" , 41.1  , "#98c5d7"  ,
+                      "PA" , 57.41 , "#f7b6ba"  ,
+                      "AP" , 61.45 , "#f7b6ba"  ,
+                      "MA" , 78.76 , "#ed6169"  ,
+                      "PI" , 78.30 , "#ed6169"  ,
+                      "CE" , 76.75 , "#ed6169"  ,
+                      "RN" , 69.96 , "#f7b6ba"  ,
+                      "PB" , 64.26 , "#f7b6ba"  ,
+                      "PE" , 70.20 , "#ed6169"  ,
+                      "AL" , 62.12 , "#f7b6ba"  ,
+                      "SE" , 67.01 , "#f7b6ba"  ,
+                      "BA" , 70.16 , "#ed6169"  ,
+                      "MG" , 52.41 , "#f7b6ba"  ,
+                      "ES" , 46.15 , "#98c5d7"  ,
+                      "RJ" , 59.94 , "#f7b6ba"  ,
+                      "SP" , 35.69 , "#98c5d7"  ,
+                      "PR" , 39.02 , "#98c5d7"  ,
+                      "SC" , 35.41 , "#98c5d7"  ,
+                      "RS" , 44.47 , "#98c5d7"  ,
+                      "MS" , 43.67 , "#98c5d7"  ,
+                      "GO" , 42.89 , "#98c5d7"  ,
+                      "DF" , 38.1  , "#98c5d7"  ,
+                      "MT" , 45.33 , "#98c5d7"  ,
+                      "RO" , 45.15 , "#98c5d7"  ,
+                      "TO" , 59.49 , "#f7b6ba")
+votacao_dilmaDf  <- as.data.frame(matrix(votacao_dilma, ncol = 3, byrow = TRUE), stringsAsFactors = FALSE)
+rownames(votacao_dilmaDf)  <- votacao_dilmaDf$V1
+totalVotosPorUF_df$cores  <- votacao_dilmaDf[rownames(totalVotosPorUF_df), "V3"]
 
 
 
 # SPDF
 # =========================================================================================
 
-cartogram_original <- SpatialPolygonsDataFrame(merged_shapes, totalVotosDf, match.ID = TRUE)
+spdf_municipios <- SpatialPolygonsDataFrame(merged_shapesMunicipios, totalVotosPorMunicipio_df, match.ID = TRUE)
+spdf_estados <- SpatialPolygonsDataFrame(shapeEstados, totalVotosPorUF_df, match.ID = TRUE)
 
+
+# Deformando os arquivos
+# =========================================================================================
+
+writePolyShape(spdf_municipios, "./municipios.shp")
+writePolyShape(spdf_estados, "./estados.shp")
+
+# Para deformar
+# * Abrir os arquivo no ScapeToad
+# * Clique em add Layer
+# * Seleciona o layer (municipios.shp ou estados.shp)
+# * clica em Create Cartogram
+# * "next"
+# * no spatial coverage selecionar estados ou municipios
+# * "next"
+# * no Cartogram attribute selecionar totalVotos
+# * no attribute type selecionar "mass"
+# * "next"
+# * "next"
+# * "Transformation Quality": High (a máxima)
+# * "compute"
+# * "export do shape"
+# * select layer to export --> municipios(2) ou estados(2)
 
 ###################################################################################
-# Abrir esse arquivo no ScapeT Toad  e depois salva o brazil_r_useworld_r_use.shp(2)
-# em distorted.shp
-writePolyShape(cartogram_original, "./brazil_r_useworld_r_use.shp")
-###################################################################################
 
 
-cartogram <- readShapePoly("./distorted.shp")
-par(family = "Palatino")
 
-# Mudas as cores
-dilma  <- "#E30513"
-aecio  <- "#006F9D"
+# Plota
+# ====================================================================================
 
-cores  <- as.character(cartogram$cores)
-grandezaDaVotacaoParadilma  <- rep(NA, length(cores))
-grandezaDaVotacaoParadilma[cores == "#006F9D"]  <- 1
-grandezaDaVotacaoParadilma[cores == "#378eb2"]  <- 2
-grandezaDaVotacaoParadilma[cores == "#98c5d7"]  <- 3
-grandezaDaVotacaoParadilma[cores == "#f7b6ba"]  <- 4
-grandezaDaVotacaoParadilma[cores == "#ed6169"]  <- 5
-grandezaDaVotacaoParadilma[cores == "#E30513"]  <- 6
+estadoDeformado_shape  <- "./estados_deformado.shp"
+municipiosDeformado_shape  <- "./municipios_deformado.shp"
 
+spdf_estadosDeformado  <- readShapePoly(estadoDeformado_shape)
+spdf_municipiosDeformado  <- readShapePoly(municipiosDeformado_shape)
+spdf_estados  <- readShapePoly("./estados.shp")
+spdf_municipios  <- readShapePoly("./municipios.shp")
 
-if(novaPaleta){
-  colfunc <- colorRampPalette(c(aecio, dilma))
-  coresNovas  <- colfunc(6)
-  for(i in 1:length(coresNovas)){
-    cores[grandezaDaVotacaoParadilma==i]  <- coresNovas[i]
-  }
-} else{
-  coresNovas  <- c("#006F9D", "#378eb2", "#98c5d7","#f7b6ba", "#ed6169","#E30513")
-}
-
-cartogram$cores  <- cores
-cartogram_original$cores  <- cores
-
-png('./final_v2.png', w = 1440, h = 700, units ='px')
-par(xpd = TRUE, mfrow = c(1, 2))
-plot(cartogram_original, col = as.character(cartogram_original$cores), lwd = 0.1)
-plot(cartogram, col = as.character(cartogram$cores), lwd = 0.1)
-rect(xleft = -70, ybottom = -40, xright = -67.5, ytop = -37.5, col = coresNovas[1])
-rect(xleft = -67.5, ybottom = -40, xright = -65, ytop = -37.5, col = coresNovas[2])
-rect(xleft = -65, ybottom = -40, xright = -62.5, ytop = -37.5, col = coresNovas[3])
-rect(xleft = -62.5, ybottom = -40, xright = -60, ytop = -37.5, col = coresNovas[4])
-rect(xleft = -60, ybottom = -40, xright = -57.5, ytop = -37.5, col = coresNovas[5])
-rect(xleft = -57.5, ybottom = -40, xright = -55, ytop = -37.5, col = coresNovas[6])
-
-cexLegend  <- 0.9
-text(x = -70, y = -41, labels = 0, cex = cexLegend)
-text(x = -67.5, y = -41, labels = 20, cex = cexLegend)
-text(x = -65, y = -41, labels = 35, cex = cexLegend)
-text(x = -62.5, y = -41, labels = 50, cex = cexLegend)
-text(x = -60, y = -41, labels = 65, cex = cexLegend)
-text(x = -57.5, y = -41, labels = 80, cex = cexLegend)
-text(x = -55, y = -41, labels = 100, cex = cexLegend)
-
-text(x = -62.5, y = -36.5, "% de votos para  Dilma Rousseff", cex = cexLegend)
-
-text(x = -35, y = -38.7, labels = "Por:\nDiogo Melo\nDaniel Mariani", adj = 0, cex = 0.8)
-dev.off()
+op <- par(mfrow = c(2,2),
+          oma = c(5,4,0,0) + 0.1,
+          mar = c(0,0,1,1) + 0.1)
+par(mfrow=c(2,2))
+plotEleicao(spdf_estados, paletaUnica = TRUE, legenda = FALSE)
+plotEleicao(spdf = spdf_estadosDeformado, paletaUnica = TRUE, legenda = FALSE)
+plotEleicao(spdf_municipios, paletaUnica = TRUE, legenda = FALSE)
+plotEleicao(spdf_municipiosDeformado, paletaUnica = TRUE, legenda = FALSE)
+addLegend4Charts(paletaUnica = TRUE)
