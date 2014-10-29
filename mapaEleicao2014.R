@@ -420,7 +420,7 @@ spdf_municipiosDeformado  <- readShapePoly(municipiosDeformado_shape)
 spdf_estados  <- readShapePoly("./estados.shp")
 spdf_municipios  <- readShapePoly("./municipios.shp")
 
-png("./final_v2.png", w = 1500, h = 1500)
+png("./final_v2.png", w = 1440, h = 1000)
 op <- par(mfrow = c(2,2),
           oma = c(5,4,0,0) + 0.1,
           mar = c(0,0,1,1) + 0.1)
