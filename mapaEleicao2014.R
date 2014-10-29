@@ -267,11 +267,13 @@ addLegend4Charts  <- function(paletaUnica = TRUE){
 
 # # downloads
 # # ==========================================================================================
- #municipiosShape_folder <- downloadMunicipiosPorEstadosShapes(municipiosShape_mainFolder)
- #estadosShape_folder  <- downloadEstadosNoBrasilShapes(estadosShape_folder)
- #downloadTse(votacaoCsv_folder)
+#municipiosShape_folder <- downloadMunicipiosPorEstadosShapes(municipiosShape_mainFolder)
+#estadosShape_folder  <- downloadEstadosNoBrasilShapes(estadosShape_folder)
+#downloadTse(votacaoCsv_folder)
 
+# Caso tenha baixado
 municipiosShape_folder <- list.dirs(municipiosShape_mainFolder)[-1]
+
 
 
 # le e formata Shapes
@@ -315,14 +317,12 @@ totalVotosPorMunicipio  <- totalVotosPorMunicipio[as.character(tabelaConversaoID
 # 8 municipios que estão no tabela de conversão não estão no TSE.
 # como esses não tem correspondência para votação são removidos
 select_NoTSE  <- is.na(totalVotosPorMunicipio)
-sum(select_NoTSE)
 codigosIBGE  <- codigosIBGE[!select_NoTSE]
 totalVotosPorMunicipio  <- totalVotosPorMunicipio[!select_NoTSE]
 
 # 10 municipios que estão no TSE não tem shapes.
 # como não seria possível representa-los, são removidos
 selectTemShape  <- codigosIBGE %in% row.names(merged_shapesMunicipios)
-sum(selectTemShape)
 totalVotosPorMunicipio  <- totalVotosPorMunicipio[selectTemShape]
 
 
@@ -369,7 +369,7 @@ votacao_dilmaUF  <- c("AC" , 63.68 , "#f7b6ba"  ,
                       "MT" , 45.33 , "#98c5d7"  ,
                       "RO" , 45.15 , "#98c5d7"  ,
                       "TO" , 59.49 , "#f7b6ba")
-votacao_dilmaDf  <- as.data.frame(matrix(votacao_dilma, ncol = 3, byrow = TRUE), stringsAsFactors = FALSE)
+votacao_dilmaDf  <- as.data.frame(matrix(votacao_dilmaUF, ncol = 3, byrow = TRUE), stringsAsFactors = FALSE)
 rownames(votacao_dilmaDf)  <- votacao_dilmaDf$V1
 totalVotosPorUF_df$cores  <- votacao_dilmaDf[rownames(totalVotosPorUF_df), "V3"]
 
@@ -420,6 +420,7 @@ spdf_municipiosDeformado  <- readShapePoly(municipiosDeformado_shape)
 spdf_estados  <- readShapePoly("./estados.shp")
 spdf_municipios  <- readShapePoly("./municipios.shp")
 
+png("./final_v2.png", w = 1500, h = 1500)
 op <- par(mfrow = c(2,2),
           oma = c(5,4,0,0) + 0.1,
           mar = c(0,0,1,1) + 0.1)
@@ -429,3 +430,4 @@ plotEleicao(spdf = spdf_estadosDeformado, paletaUnica = TRUE, legenda = FALSE)
 plotEleicao(spdf_municipios, paletaUnica = TRUE, legenda = FALSE)
 plotEleicao(spdf_municipiosDeformado, paletaUnica = TRUE, legenda = FALSE)
 addLegend4Charts(paletaUnica = TRUE)
+dev.off()
