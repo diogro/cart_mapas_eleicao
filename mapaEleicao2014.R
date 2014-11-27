@@ -19,7 +19,9 @@ csvConversaoId  <- "./conversao_ID_IBGE_TSE2.csv"
 csv_segundo_turno <- 'https://dl.dropboxusercontent.com/u/891794/dfMunicipios.csv'
 
 # https://scontent-b-mia.xx.fbcdn.net/hphotos-xpf1/v/t1.0-9/10359221_10204130302151847_4476543488279263099_n.jpg?oh=2bc51d420264d51b8fb4b52a359de85a&oe=54B0D984
-paleta  <- rev(brewer.pal(11, "RdBu"))
+paletaRdBu  <- rev(brewer.pal(11, "RdBu"))
+colfunc <- colorRampPalette(paletaRdBu)
+paleta  <- colfunc(500)
 
 # Functions
 # =======================================================================================
@@ -34,7 +36,7 @@ download_unzip_removezip  <- function(zip_url, destfolder){
   zip_file  <- gsub(".*/", "", zip_url)
   zip_dest  <- paste(destfolder, zip_file, sep = "/")
   download.file(zip_url, zip_dest)
-  files  <- unzip(zip_dest, exdir = destfolder)
+  files  <- unzip(zip_dest, exdir = destfolder, list = TRUE)
   file.remove(zip_dest)
   files
 }
@@ -189,6 +191,29 @@ getBoletimUrnaInfosPorMunicipio  <- function(bu_path, cargo){
   df
 }
 
+
+# based in http://stackoverflow.com/questions/13355176/gradient-legend-in-base
+makeLegendGradiente  <- function(xl, yb, xr, yt, paleta, lwd = 0.1, cex = 0.9, nMarks  = 12, distText = 1){
+  legend_image <- as.raster(matrix(colfunc(20), ncol=1))
+  text(x=1.5, y = seq(0,1,l=5), labels = seq(0,1,l=5))
+  rasterImage(legend_image, 0, 0, 1,1)
+
+  nCores  <- length(paleta)
+
+  rect(xl,
+       head(seq(yb, yt, (yt-yb)/nCores),-1),
+       xr,
+       tail(seq(yb,yt,(yt-yb)/nCores),-1),
+       col = paleta,
+       lwd = lwd)
+
+  textLengend <-  round(seq(from = 0, to = 100, length.out  = nMarks))
+  atY  <- seq(from = yb, to = yt, length.out = nMarks)
+  text(x = xl - distText, y = atY,
+       labels = textLengend, cex = cex)
+
+}
+
 # # downloads
 # # ==========================================================================================
 # municipiosShape_folder <- downloadMunicipiosPorEstadosShapes(municipiosShape_mainFolder)
@@ -264,7 +289,7 @@ writePolyShape(spdf_municipios, "~/Desktop/municipios.shp")
 # Para deformar
 # * Abrir os arquivo no ScapeToad
 # * Clique em add Layer
-# * Seleciona o layer (municipios.shp ou estados.shp)
+# * Seleciona o layer municipios.shp
 # * clica em Create Cartogram
 # * "next"
 # * no spatial coverage selecionar estados ou municipios
@@ -276,8 +301,8 @@ writePolyShape(spdf_municipios, "~/Desktop/municipios.shp")
 # * "Transformation Quality": High (a máxima)
 # * "compute"
 # * "export do shape"
-# * select layer to export --> municipios(2) ou estados(2)
-
+# * select layer to export --> municipios(2)
+# * (salve como municipios_deformados)
 ###################################################################################
 
 
@@ -287,4 +312,53 @@ writePolyShape(spdf_municipios, "~/Desktop/municipios.shp")
 
 municipiosDeformado_shape  <- "~/Desktop/municipios_deformados.dbf"
 spdf_municipiosDeformado  <- readOGR(normalizePath("~/Desktop/"), "municipios_deformados")
-plot(spdf_municipiosDeformado, col = as.character(spdf_municipiosDeformado$cor), lwd = 0.1)
+
+myBlack  <- "#1C201F"
+alphaLine  <- 0.7
+lwdLine  <- 1
+
+op <- par(mfrow = c(1,2), family = "Palatino",
+          oma = c(0,0,0,0) + 0.1,
+          mar = c(0,0,0,0) + 0.1)
+plot(spdf_municipios, col = as.character(spdf_municipios$cor), lwd = 0.1)
+plot(spdf_municipiosDeformado, col = as.character(spdf_municipios$cor), lwd = 0.1)
+par(new = TRUE, mfrow = c(1,1))
+plot(1:100,  type="n", axes = FALSE)
+xl <- 7
+yb <- 0
+xr <- 5
+yt <- 15
+makeLegendGradiente(xl,yb, xr, yt, paleta, lwd = 0, nMarks = 6, distText = -2, cex = 0.7)
+text(x = (xr + xl)/2, y = yt + 4, labels = "% votes for the winner\n(Dilma Roussef)", cex = 0.75, col = myBlack)
+textbox(x = c(20, 70), y = 15 + 4.5, box = FALSE, leading = 1,
+        textlist = c("Brazilian votting pattern for the second round of presidential election using a density equalizing deformation on total number of votes. The deformation was done in ScapeToad, unsing the tecnique described in Gastner/Newman (2004) Diffusion-based method for producing density-equalizing maps."),
+        col = myBlack)
+
+textbox(x = c(20, 70), y = 2.5, box = FALSE, leading = 1,
+        textlist = c("Code: github.com/diogro/cart_mapas_eleicao"),
+        col = myBlack)
+
+textbox(x = c(77, 100), y = c(15 + 4.5), box = FALSE, leading = 0.7, cex = 1,
+        textlist = "Sources:",
+        col = myBlack)
+textbox(x = c(77, 100), y = c(16.5), box = FALSE, leading = 0.7, cex = 0.7,
+        textlist = c("Color Palette: 500 interpolation of the RdBu Palette from Cynthia Brewer"),
+        col = myBlack)
+textbox(x = c(77, 100), y = c(13.5), box = FALSE, leading = 0.7, cex = 0.7,
+        textlist = c("Data vote: Brazilian Superior Electoral Court (TSE)"),
+        col = myBlack)
+textbox(x = c(77, 100), y = c(10.5), box = FALSE, leading = 0.7, cex = 0.7,
+        textlist = c("Shape Files: Brazilian Institute of Geography and Statistics (IBGE)"),
+        col = myBlack)
+
+
+
+textbox(x = c(77, 100), y = c(6), box = FALSE, leading = 0.7, cex = 1,
+        textlist = "Authors:",
+        col = myBlack)
+textbox(x = c(77, 100), y = c(3), box = FALSE, leading = 0.7, cex = 0.7,
+        textlist = c("Diogo Melo"),
+        col = myBlack)
+textbox(x = c(77, 100), y = c(1), box = FALSE, leading = 0.7, cex = 0.7,
+        textlist = c("Daniel Mariani"),
+        col = myBlack)
